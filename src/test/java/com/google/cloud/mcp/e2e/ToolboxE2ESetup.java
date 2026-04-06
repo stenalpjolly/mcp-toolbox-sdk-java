@@ -183,7 +183,7 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
   private String getEnvVar(String key) {
     String val = System.getenv(key);
     if (val == null) {
-      throw new RuntimeException("Environment variable " + key + " is not set.");
+      org.junit.jupiter.api.Assumptions.abort("Environment variable " + key + " is not set.");
     }
     return val;
   }

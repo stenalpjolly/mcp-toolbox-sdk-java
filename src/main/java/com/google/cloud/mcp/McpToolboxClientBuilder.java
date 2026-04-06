@@ -16,10 +16,14 @@
 
 package com.google.cloud.mcp;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** Implementation of the {@link McpToolboxClient.Builder} interface. */
 public class McpToolboxClientBuilder implements McpToolboxClient.Builder {
   private String baseUrl;
   private String apiKey;
+  private Map<String, String> headers = new HashMap<>();
 
   /** Constructs a new McpToolboxClientBuilder. */
   public McpToolboxClientBuilder() {}
@@ -37,6 +41,14 @@ public class McpToolboxClientBuilder implements McpToolboxClient.Builder {
   }
 
   @Override
+  public McpToolboxClient.Builder headers(Map<String, String> headers) {
+    if (headers != null) {
+      this.headers.putAll(headers);
+    }
+    return this;
+  }
+
+  @Override
   public McpToolboxClient build() {
     if (baseUrl == null || baseUrl.isEmpty()) {
       throw new IllegalArgumentException("Base URL must be provided");
@@ -45,6 +57,6 @@ public class McpToolboxClientBuilder implements McpToolboxClient.Builder {
     if (baseUrl.endsWith("/")) {
       baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
     }
-    return new HttpMcpToolboxClient(baseUrl, apiKey);
+    return new HttpMcpToolboxClient(baseUrl, apiKey, headers);
   }
 }

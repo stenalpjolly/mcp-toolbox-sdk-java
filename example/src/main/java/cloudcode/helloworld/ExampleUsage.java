@@ -77,6 +77,7 @@ try {
             McpToolboxClient client = McpToolboxClient.builder()
                 .baseUrl(targetUrl)
                 .apiKey(idToken)
+                .headers(Map.of("X-Custom-Header", "example-value"))
                 .build();
 
             // STEP 1: TEST DISCOVERY METHODS
