@@ -16,6 +16,10 @@ The project strictly follows the Google Java Style Guide. Lines must not exceed 
 ```bash
 # Format code (Required before pushing)
 mvn com.spotify.fmt:fmt-maven-plugin:format
+
+# Run the exact CI linting checks locally (formatting and Javadocs) to prevent CI failures
+mvn com.spotify.fmt:fmt-maven-plugin:check -B -ntp
+mvn javadoc:javadoc -B -ntp
 ```
 
 ### Testing
