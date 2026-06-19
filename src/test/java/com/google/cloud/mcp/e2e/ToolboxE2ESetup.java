@@ -48,7 +48,11 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
 
   @Override
   public void beforeAll(ExtensionContext context) throws Exception {
-    String projectId = getEnvVar(PROJECT_ID_ENV);
+    String projectId = System.getenv(PROJECT_ID_ENV);
+    org.junit.jupiter.api.Assumptions.assumeTrue(
+        projectId != null && !projectId.trim().isEmpty(),
+        "Skipping E2E tests because " + PROJECT_ID_ENV + " is not set.");
+
     String toolboxVersion = getEnvVar(TOOLBOX_VERSION_ENV);
     String manifestVersion = getEnvVar(TOOLBOX_MANIFEST_VERSION_ENV);
 
