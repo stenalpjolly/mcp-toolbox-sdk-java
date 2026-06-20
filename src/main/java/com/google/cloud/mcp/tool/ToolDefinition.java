@@ -25,7 +25,7 @@ import java.util.List;
  *
  * @param description A description of what the tool does.
  * @param parameters A list of parameters the tool accepts.
- * @param authRequired List of auth services required by the tool.
+ * @param authRequired A list of authentication sources required by the tool.
  * @param readOnlyHint Hint indicating whether the tool is read-only.
  * @param destructiveHint Hint indicating whether the tool is destructive.
  */
