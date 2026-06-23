@@ -26,7 +26,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.lang.reflect.Field;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -48,13 +47,10 @@ class McpToolboxClientImplJsonRpcTest {
   @BeforeEach
   @SuppressWarnings("unchecked")
   void setUp() throws Exception {
-    client = new McpToolboxClientImpl("http://localhost:8080", "test-api-key");
     mockHttpClient = mock(HttpClient.class);
-
-    // Inject mock HttpClient using reflection
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(client, mockHttpClient);
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+    CredentialsProvider provider = () -> CompletableFuture.completedFuture("Bearer test-api-key");
+    client = new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), provider);
   }
 
   @Test

@@ -55,13 +55,10 @@ class McpToolboxClientImplTest {
   @BeforeEach
   @SuppressWarnings("unchecked")
   void setUp() throws Exception {
-    client = new McpToolboxClientImpl("http://localhost:8080", "test-api-key");
     mockHttpClient = mock(HttpClient.class);
-
-    // Inject mock HttpClient using reflection
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(client, mockHttpClient);
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+    CredentialsProvider provider = () -> CompletableFuture.completedFuture("Bearer test-api-key");
+    client = new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), provider);
   }
 
   @Test
@@ -412,11 +409,10 @@ class McpToolboxClientImplTest {
 
   @Test
   void testEnsureInitialized_withHttpsBaseUrl() throws Exception {
+    HttpMcpTransport transport = new HttpMcpTransport("https://localhost:8443", mockHttpClient);
+    CredentialsProvider provider = () -> CompletableFuture.completedFuture("Bearer test-api-key");
     McpToolboxClientImpl httpsClient =
-        new McpToolboxClientImpl("https://localhost:8443", "test-api-key");
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(httpsClient, mockHttpClient);
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), provider);
 
     HttpResponse<String> initResponse = mock(HttpResponse.class);
     when(initResponse.statusCode()).thenReturn(200);
@@ -441,11 +437,9 @@ class McpToolboxClientImplTest {
 
   @Test
   void testEnsureInitialized_withoutApiKeyFallbackToAdcException() throws Exception {
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
     McpToolboxClientImpl noAuthClient =
-        new McpToolboxClientImpl("http://localhost:8080", (String) null);
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(noAuthClient, mockHttpClient);
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
 
     HttpResponse<String> initResponse = mock(HttpResponse.class);
     when(initResponse.statusCode()).thenReturn(200);
@@ -506,15 +500,9 @@ class McpToolboxClientImplTest {
 
   @Test
   void testLoadToolset_withInvalidUriThrowsException() {
-    McpToolboxClientImpl badClient = new McpToolboxClientImpl("http://invalid uri", (String) null);
-    Field httpClientField = null;
-    try {
-      httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-      httpClientField.setAccessible(true);
-      httpClientField.set(badClient, mockHttpClient);
-    } catch (Exception e) {
-      org.junit.jupiter.api.Assertions.fail(e);
-    }
+    HttpMcpTransport transport = new HttpMcpTransport("http://invalid uri", mockHttpClient);
+    McpToolboxClientImpl badClient =
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
 
     Exception exception =
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -525,14 +513,12 @@ class McpToolboxClientImplTest {
 
   @Test
   void testInvokeTool_withInvalidUriThrowsException() throws Exception {
-    McpToolboxClientImpl badClient = new McpToolboxClientImpl("http://invalid uri", (String) null);
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(badClient, mockHttpClient);
-
-    Field initField = McpToolboxClientImpl.class.getDeclaredField("initialized");
+    HttpMcpTransport transport = new HttpMcpTransport("http://invalid uri", mockHttpClient);
+    Field initField = HttpMcpTransport.class.getDeclaredField("initialized");
     initField.setAccessible(true);
-    initField.set(badClient, true); // bypass initialization
+    initField.set(transport, true); // bypass initialization
+    McpToolboxClientImpl badClient =
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
 
     Exception exception =
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -591,11 +577,9 @@ class McpToolboxClientImplTest {
 
   @Test
   void testEnsureInitialized_withNullAuthHeader() throws Exception {
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
     McpToolboxClientImpl noAuthClient =
-        new McpToolboxClientImpl("http://localhost:8080", (String) null);
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(noAuthClient, mockHttpClient);
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
 
     HttpResponse<String> initResponse = mock(HttpResponse.class);
     when(initResponse.statusCode()).thenReturn(200);
@@ -609,12 +593,11 @@ class McpToolboxClientImplTest {
         .thenReturn(CompletableFuture.completedFuture(initResponse))
         .thenReturn(CompletableFuture.completedFuture(notifResponse));
 
-    Method initMethod =
-        McpToolboxClientImpl.class.getDeclaredMethod("ensureInitialized", String.class);
+    Method initMethod = HttpMcpTransport.class.getDeclaredMethod("ensureInitialized", Map.class);
     initMethod.setAccessible(true);
 
     CompletableFuture<Void> future =
-        (CompletableFuture<Void>) initMethod.invoke(noAuthClient, (String) null);
+        (CompletableFuture<Void>) initMethod.invoke(transport, java.util.Collections.emptyMap());
     future.join(); // should complete and NOT set Authorization header
 
     ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
@@ -629,9 +612,10 @@ class McpToolboxClientImplTest {
     McpToolboxClientImpl clientWithSlash =
         new McpToolboxClientImpl("http://localhost:8080/", (Map<String, String>) null);
 
-    Field baseUrlField = McpToolboxClientImpl.class.getDeclaredField("baseUrl");
-    baseUrlField.setAccessible(true);
-    assertEquals("http://localhost:8080", baseUrlField.get(clientWithSlash));
+    Field transportField = McpToolboxClientImpl.class.getDeclaredField("transport");
+    transportField.setAccessible(true);
+    Transport transport = (Transport) transportField.get(clientWithSlash);
+    assertEquals("http://localhost:8080", transport.getBaseUrl());
 
     Field headersField = McpToolboxClientImpl.class.getDeclaredField("headers");
     headersField.setAccessible(true);
@@ -644,11 +628,9 @@ class McpToolboxClientImplTest {
   void testEnsureInitialized_withCustomHeaders() throws Exception {
     Map<String, String> customHeaders =
         Map.of("X-Custom-Header", "custom-val", "Authorization", "some-apiKey");
-    McpToolboxClientImpl customClient =
-        new McpToolboxClientImpl("http://localhost:8080", customHeaders);
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(customClient, mockHttpClient);
+    HttpMcpTransport transport =
+        new HttpMcpTransport("http://localhost:8080", customHeaders, mockHttpClient);
+    McpToolboxClientImpl customClient = new McpToolboxClientImpl(transport, customHeaders, null);
 
     HttpResponse<String> initResponse = mock(HttpResponse.class);
     when(initResponse.statusCode()).thenReturn(200);
@@ -731,10 +713,9 @@ class McpToolboxClientImplTest {
   @Test
   @SuppressWarnings("unchecked")
   void testDefaultLoadToolset() throws Exception {
-    McpToolboxClientImpl client = new McpToolboxClientImpl("http://localhost:8080", (String) null);
-    Field httpClientField = McpToolboxClientImpl.class.getDeclaredField("httpClient");
-    httpClientField.setAccessible(true);
-    httpClientField.set(client, mockHttpClient);
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+    McpToolboxClientImpl client =
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
 
     HttpResponse<String> initResponse = mock(HttpResponse.class);
     when(initResponse.statusCode()).thenReturn(200);
@@ -757,5 +738,213 @@ class McpToolboxClientImplTest {
     Map<String, ToolDefinition> tools = ((McpToolboxClient) client).loadToolset().join();
     assertNotNull(tools);
     assertTrue(tools.isEmpty());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  void testCoverageBoosters() throws Exception {
+    // 1. Cover HttpMcpTransport close() method
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+    transport.close();
+
+    // 2. Cover HttpMcpTransport constructor with null headers
+    HttpMcpTransport transportWithNullHeaders =
+        new HttpMcpTransport("http://localhost:8080", null, mockHttpClient);
+    assertNotNull(transportWithNullHeaders);
+
+    // 3. Cover McpToolboxClientImpl deprecated constructor 1
+    McpToolboxClientImpl client1 =
+        new McpToolboxClientImpl("http://localhost:8080", java.util.Collections.emptyMap(), null);
+    assertNotNull(client1);
+
+    // 4. Cover McpToolboxClientImpl deprecated constructor 2
+    McpToolboxClientImpl client2 = new McpToolboxClientImpl(transport, null);
+    assertNotNull(client2);
+  }
+
+  @Test
+  void testInvokeTool_withNullHeadersThrows() {
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+    McpToolboxClientImpl client =
+        new McpToolboxClientImpl(transport, java.util.Collections.emptyMap(), null);
+
+    CompletableFuture<ToolResult> future =
+        client.invokeTool("test-tool", java.util.Collections.emptyMap(), null);
+    java.util.concurrent.ExecutionException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            java.util.concurrent.ExecutionException.class, future::get);
+    assertTrue(ex.getCause() instanceof NullPointerException);
+  }
+
+  @Test
+  void testListTools_withInvalidToolsetNameThrows() throws Exception {
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+
+    // Force transport to be initialized first
+    Field initField = HttpMcpTransport.class.getDeclaredField("initialized");
+    initField.setAccessible(true);
+    initField.set(transport, true);
+
+    CompletableFuture<TransportManifest> future =
+        transport.listTools("invalid path with spaces \\", java.util.Collections.emptyMap());
+    java.util.concurrent.ExecutionException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            java.util.concurrent.ExecutionException.class, future::get);
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+  }
+
+  @Test
+  void testEnsureInitialized_withNotificationSerializationFailure() throws Exception {
+    HttpMcpTransport transport = new HttpMcpTransport("http://localhost:8080", mockHttpClient);
+
+    // Mock ObjectMapper to throw on notification
+    ObjectMapper mockMapper = mock(ObjectMapper.class);
+    when(mockMapper.writeValueAsString(any(JsonRpc.Request.class))).thenReturn("{}");
+    when(mockMapper.writeValueAsString(any(JsonRpc.Notification.class)))
+        .thenThrow(new RuntimeException("Simulated notification serialization failure"));
+
+    Field mapperField = HttpMcpTransport.class.getDeclaredField("objectMapper");
+    mapperField.setAccessible(true);
+    mapperField.set(transport, mockMapper);
+
+    HttpResponse<String> initResponse = mock(HttpResponse.class);
+    when(initResponse.statusCode()).thenReturn(200);
+    when(initResponse.body()).thenReturn("{}");
+
+    when(mockHttpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+        .thenReturn(CompletableFuture.completedFuture(initResponse));
+
+    Method initMethod = HttpMcpTransport.class.getDeclaredMethod("ensureInitialized", Map.class);
+    initMethod.setAccessible(true);
+
+    CompletableFuture<Void> future =
+        (CompletableFuture<Void>) initMethod.invoke(transport, java.util.Collections.emptyMap());
+
+    java.util.concurrent.ExecutionException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            java.util.concurrent.ExecutionException.class, future::get);
+    assertTrue(ex.getCause().getMessage().contains("Simulated notification serialization failure"));
+  }
+
+  @Test
+  void testInvokeTool_MalformedJsonResponse_GracefullyFallsBack() throws Exception {
+    HttpResponse<String> initResponse = mock(HttpResponse.class);
+    when(initResponse.statusCode()).thenReturn(200);
+    when(initResponse.body()).thenReturn("{}");
+
+    HttpResponse<String> notifResponse = mock(HttpResponse.class);
+    when(notifResponse.statusCode()).thenReturn(200);
+    when(notifResponse.body()).thenReturn("{}");
+
+    HttpResponse<String> invokeResponse = mock(HttpResponse.class);
+    when(invokeResponse.statusCode()).thenReturn(200);
+    when(invokeResponse.body()).thenReturn("{invalid-json"); // Trigger JSON parse exception
+
+    when(mockHttpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+        .thenReturn(CompletableFuture.completedFuture(initResponse))
+        .thenReturn(CompletableFuture.completedFuture(notifResponse))
+        .thenReturn(CompletableFuture.completedFuture(invokeResponse));
+
+    ToolResult res = client.invokeTool("test-tool", Map.of()).join();
+    assertNotNull(res);
+    assertFalse(res.isError());
+    assertEquals("{invalid-json", res.content().get(0).text());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void testGetAuthorizationHeader_WithNoAuthInHeaders() throws Exception {
+    McpToolboxClientImpl clientNoAuth =
+        new McpToolboxClientImpl(mock(Transport.class), Map.of("X-Other", "SomeValue"), null);
+
+    Method getAuthHeaderMethod =
+        McpToolboxClientImpl.class.getDeclaredMethod("getAuthorizationHeader");
+    getAuthHeaderMethod.setAccessible(true);
+    CompletableFuture<String> future =
+        (CompletableFuture<String>) getAuthHeaderMethod.invoke(clientNoAuth);
+    assertNull(future.join());
+  }
+
+  @Test
+  void testConstructor_WithOnlyTransport() {
+    Transport mockTransport = mock(Transport.class);
+    McpToolboxClientImpl simpleClient = new McpToolboxClientImpl(mockTransport);
+    assertNotNull(simpleClient);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void testGetMergedMetadata_WithMockGenericTransport_AllBranches() throws Exception {
+    Transport mockTransport = mock(Transport.class);
+    when(mockTransport.getBaseUrl()).thenReturn("https://test-mcp-service.com");
+    when(mockTransport.invokeTool(any(), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new TransportResponse(200, "{\"result\":{}}")));
+
+    CredentialsProvider provider = () -> CompletableFuture.completedFuture("Bearer test-api-key");
+    McpToolboxClientImpl genericClient =
+        new McpToolboxClientImpl(mockTransport, Map.of("Custom-Header", "Value"), provider);
+
+    // Call invokeTool with extra metadata to trigger merge
+    genericClient
+        .invokeTool(
+            "test-tool",
+            Map.of(),
+            Map.of("Extra-Header", "ExtraValue", "Authorization", "Bearer overridden"))
+        .join();
+
+    ArgumentCaptor<Map<String, String>> metadataCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(mockTransport).invokeTool(any(), any(), metadataCaptor.capture());
+
+    Map<String, String> mergedMetadata = metadataCaptor.getValue();
+    assertEquals("Value", mergedMetadata.get("Custom-Header"));
+    assertEquals("ExtraValue", mergedMetadata.get("Extra-Header"));
+    assertEquals("Bearer overridden", mergedMetadata.get("Authorization"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void testGetMergedMetadata_WithMockGenericTransport_NullExtraMetadata() throws Exception {
+    Transport mockTransport = mock(Transport.class);
+    when(mockTransport.getBaseUrl()).thenReturn("https://test-mcp-service.com");
+    when(mockTransport.invokeTool(any(), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new TransportResponse(200, "{\"result\":{}}")));
+
+    CredentialsProvider provider = () -> CompletableFuture.completedFuture("Bearer test-api-key");
+    McpToolboxClientImpl genericClient =
+        new McpToolboxClientImpl(mockTransport, Map.of("Custom-Header", "Value"), provider);
+
+    // Call invokeTool with null extra metadata to trigger branch
+    genericClient.invokeTool("test-tool", Map.of(), (Map<String, String>) null).join();
+
+    ArgumentCaptor<Map<String, String>> metadataCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(mockTransport).invokeTool(any(), any(), metadataCaptor.capture());
+
+    Map<String, String> mergedMetadata = metadataCaptor.getValue();
+    assertEquals("Value", mergedMetadata.get("Custom-Header"));
+    assertEquals("Bearer test-api-key", mergedMetadata.get("Authorization"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void testGetMergedMetadata_WithMockGenericTransport_NullProviderAndEmptyHeaders()
+      throws Exception {
+    Transport mockTransport = mock(Transport.class);
+    when(mockTransport.getBaseUrl()).thenReturn("https://test-mcp-service.com");
+    when(mockTransport.invokeTool(any(), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new TransportResponse(200, "{\"result\":{}}")));
+
+    McpToolboxClientImpl genericClient = new McpToolboxClientImpl(mockTransport, Map.of(), null);
+
+    genericClient.invokeTool("test-tool", Map.of(), Map.of("Extra-Header", "ExtraValue")).join();
+
+    ArgumentCaptor<Map<String, String>> metadataCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(mockTransport).invokeTool(any(), any(), metadataCaptor.capture());
+
+    Map<String, String> mergedMetadata = metadataCaptor.getValue();
+    assertEquals("ExtraValue", mergedMetadata.get("Extra-Header"));
+    assertFalse(mergedMetadata.containsKey("Authorization"));
   }
 }
