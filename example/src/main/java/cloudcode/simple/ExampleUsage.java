@@ -17,47 +17,24 @@
 package cloudcode.simple;
 
 import com.google.cloud.mcp.McpToolboxClient;
+import com.google.cloud.mcp.ToolResult;
 import java.util.Map;
 
-/**
- * A minimal example demonstrating client initialization, tool discovery, and invocation.
- */
+/** A minimal example demonstrating client initialization, tool discovery, and invocation. */
 public class ExampleUsage {
   public static void main(String[] args) {
     String targetUrl = System.getProperty("toolbox.url", "YOUR_TOOLBOX_SERVICE_ENDPOINT");
     String apiKey = System.getProperty("toolbox.apiKey", "YOUR_API_KEY");
 
-    System.out.println("--- Starting MCP Toolbox Simple Example ---");
-    System.out.println("Connecting to: " + targetUrl);
-
     // Initialize the client
-    McpToolboxClient client =
-        McpToolboxClient.builder().baseUrl(targetUrl).apiKey(apiKey).build();
+    McpToolboxClient client = McpToolboxClient.builder().baseUrl(targetUrl).apiKey(apiKey).build();
 
-    // 1. List available tools
-    client
-        .listTools()
-        .thenAccept(
-            tools -> {
-              System.out.println("Available tools: " + tools.size());
-              for (String toolName : tools.keySet()) {
-                System.out.println(" - " + toolName);
-              }
+    // 1. List available tools synchronously
+    Map<String, ?> tools = client.listTools().join();
+    System.out.println("Available tools: " + tools.keySet());
 
-              // 2. Invoke a simple tool
-              if (tools.containsKey("get-retail-facet-filters")) {
-                System.out.println("\nInvoking 'get-retail-facet-filters'...");
-                client
-                    .invokeTool("get-retail-facet-filters", Map.of())
-                    .thenAccept(
-                        result -> {
-                          System.out.println("Result: " + result.content().get(0).text());
-                        })
-                    .join();
-              }
-            })
-        .join();
-
-    System.out.println("\n--- Simple Example Complete ---");
+    // 2. Invoke a simple tool synchronously
+    ToolResult result = client.invokeTool("get-retail-facet-filters", Map.of()).join();
+    System.out.println("Result: " + result.content().get(0).text());
   }
 }
