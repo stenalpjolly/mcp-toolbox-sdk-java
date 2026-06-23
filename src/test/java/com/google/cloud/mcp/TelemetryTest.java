@@ -223,6 +223,16 @@ public class TelemetryTest {
     assertEquals("", noHost.address());
     assertNull(noHost.port());
 
+    TelemetryHelper.ServerInfo noHostWithPort =
+        TelemetryHelper.extractServerInfo("http://my_server:8080");
+    assertEquals("my_server", noHostWithPort.address());
+    assertEquals(8080, noHostWithPort.port());
+
+    TelemetryHelper.ServerInfo invalidPort =
+        TelemetryHelper.extractServerInfo("http://my_server:invalidport");
+    assertEquals("my_server", invalidPort.address());
+    assertNull(invalidPort.port());
+
     TelemetryHelper.ServerInfo noProtocol = TelemetryHelper.extractServerInfo("//localhost:8080");
     assertEquals("localhost", noProtocol.address());
     assertEquals(8080, noProtocol.port());

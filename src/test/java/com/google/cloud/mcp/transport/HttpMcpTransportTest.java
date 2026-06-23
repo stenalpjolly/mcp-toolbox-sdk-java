@@ -19,6 +19,7 @@ package com.google.cloud.mcp.transport;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -473,5 +474,29 @@ class HttpMcpTransportTest {
         tool.parameters().stream().filter(p -> p.name().equals("p2")).findFirst().get();
     assertFalse(p2.required());
     assertEquals("string", p2.type());
+  }
+  @Test
+  @Timeout(5)
+  @SuppressWarnings("unchecked")
+  void testInvokeTool_ExceptionRecording() throws Exception {
+    HttpResponse<String> mockInitResponse = mock(HttpResponse.class);
+    when(mockInitResponse.statusCode()).thenReturn(200);
+    when(mockInitResponse.body())
+        .thenReturn(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"result\":{\"protocolVersion\":\"2025-11-25\"}}");
+
+    HttpResponse<String> mockInitializedResponse = mock(HttpResponse.class);
+    when(mockInitializedResponse.statusCode()).thenReturn(200);
+    when(mockInitializedResponse.body()).thenReturn("");
+
+    when(mockClient.<String>sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+        .thenReturn(CompletableFuture.completedFuture(mockInitResponse))
+        .thenReturn(CompletableFuture.completedFuture(mockInitializedResponse))
+        .thenReturn(CompletableFuture.failedFuture(new java.io.IOException("connection failure")));
+
+    CompletableFuture<TransportResponse> futureResult =
+        transport.invokeTool("test-tool", Map.of(), Collections.emptyMap());
+
+    assertThrows(Exception.class, futureResult::get);
   }
 }

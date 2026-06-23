@@ -158,6 +158,14 @@ public final class TelemetryHelper {
         }
       }
       int port = uri.getPort();
+      if (port == -1 && uri.getAuthority() != null && uri.getAuthority().contains(":")) {
+        try {
+          String auth = uri.getAuthority();
+          port = Integer.parseInt(auth.substring(auth.indexOf(':') + 1));
+        } catch (NumberFormatException e) {
+          // ignore
+        }
+      }
       String protocol = uri.getScheme();
       if (protocol == null) {
         protocol = "http";
