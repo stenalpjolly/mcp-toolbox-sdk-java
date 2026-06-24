@@ -20,6 +20,7 @@ import com.google.cloud.mcp.McpToolboxClient;
 import com.google.cloud.mcp.auth.AuthResolver;
 import com.google.cloud.mcp.auth.AuthTokenGetter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,22 +37,46 @@ public class Tool {
   private final ToolDefinition definition;
   private final McpToolboxClient client;
 
-  private final Map<String, Object> boundParameters = new HashMap<>();
-  private final Map<String, AuthTokenGetter> authGetters = new HashMap<>();
-  private final List<ToolPreProcessor> preProcessors = new ArrayList<>();
-  private final List<ToolPostProcessor> postProcessors = new ArrayList<>();
+  private final Map<String, Object> boundParameters;
+  private final Map<String, AuthTokenGetter> authGetters;
+  private final List<ToolPreProcessor> preProcessors;
+  private final List<ToolPostProcessor> postProcessors;
 
   /**
    * Constructs a new Tool.
    *
-   * @param name The name of the tool.
-   * @param definition The definition of the tool.
-   * @param client The client used to invoke the tool.
+   * @param toolName The name of the tool.
+   * @param toolDefinition The definition of the tool.
+   * @param toolboxClient The client used to invoke the tool.
    */
-  public Tool(String name, ToolDefinition definition, McpToolboxClient client) {
-    this.name = name;
-    this.definition = definition;
-    this.client = client;
+  public Tool(
+      final String toolName,
+      final ToolDefinition toolDefinition,
+      final McpToolboxClient toolboxClient) {
+    this.name = toolName;
+    this.definition = toolDefinition;
+    this.client = toolboxClient;
+    this.boundParameters = Collections.emptyMap();
+    this.authGetters = Collections.emptyMap();
+    this.preProcessors = Collections.emptyList();
+    this.postProcessors = Collections.emptyList();
+  }
+
+  private Tool(
+      final String toolName,
+      final ToolDefinition toolDefinition,
+      final McpToolboxClient toolboxClient,
+      final Map<String, Object> initialBoundParameters,
+      final Map<String, AuthTokenGetter> initialAuthGetters,
+      final List<ToolPreProcessor> initialPreProcessors,
+      final List<ToolPostProcessor> initialPostProcessors) {
+    this.name = toolName;
+    this.definition = toolDefinition;
+    this.client = toolboxClient;
+    this.boundParameters = Collections.unmodifiableMap(new HashMap<>(initialBoundParameters));
+    this.authGetters = Collections.unmodifiableMap(new HashMap<>(initialAuthGetters));
+    this.preProcessors = Collections.unmodifiableList(new ArrayList<>(initialPreProcessors));
+    this.postProcessors = Collections.unmodifiableList(new ArrayList<>(initialPostProcessors));
   }
 
   /**
@@ -77,11 +102,20 @@ public class Tool {
    *
    * @param key The parameter name.
    * @param value The value to bind.
-   * @return The tool instance.
+   * @return A new tool instance with the parameter bound and pruned from definition.
    */
-  public Tool bindParam(String key, Object value) {
-    this.boundParameters.put(key, value);
-    return this;
+  public Tool bindParam(final String key, final Object value) {
+    Map<String, Object> newBound = new HashMap<>(this.boundParameters);
+    newBound.put(key, value);
+    ToolDefinition newDef = pruneParameter(this.definition, key);
+    return new Tool(
+        this.name,
+        newDef,
+        this.client,
+        newBound,
+        this.authGetters,
+        this.preProcessors,
+        this.postProcessors);
   }
 
   /**
@@ -89,11 +123,20 @@ public class Tool {
    *
    * @param key The parameter name.
    * @param valueSupplier The supplier that provides the value at execution time.
-   * @return The tool instance.
+   * @return A new tool instance with the parameter bound and pruned from definition.
    */
-  public Tool bindParam(String key, Supplier<Object> valueSupplier) {
-    this.boundParameters.put(key, valueSupplier);
-    return this;
+  public Tool bindParam(final String key, final Supplier<Object> valueSupplier) {
+    Map<String, Object> newBound = new HashMap<>(this.boundParameters);
+    newBound.put(key, valueSupplier);
+    ToolDefinition newDef = pruneParameter(this.definition, key);
+    return new Tool(
+        this.name,
+        newDef,
+        this.client,
+        newBound,
+        this.authGetters,
+        this.preProcessors,
+        this.postProcessors);
   }
 
   /**
@@ -101,11 +144,38 @@ public class Tool {
    *
    * @param serviceName The name of the service.
    * @param getter The token getter.
-   * @return The tool instance.
+   * @return A new tool instance with the token getter registered.
    */
-  public Tool addAuthTokenGetter(String serviceName, AuthTokenGetter getter) {
-    this.authGetters.put(serviceName, getter);
-    return this;
+  public Tool addAuthTokenGetter(final String serviceName, final AuthTokenGetter getter) {
+    Map<String, AuthTokenGetter> newAuth = new HashMap<>(this.authGetters);
+    newAuth.put(serviceName, getter);
+    return new Tool(
+        this.name,
+        this.definition,
+        this.client,
+        this.boundParameters,
+        newAuth,
+        this.preProcessors,
+        this.postProcessors);
+  }
+
+  private static ToolDefinition pruneParameter(
+      final ToolDefinition original, final String paramName) {
+    if (original.parameters() == null) {
+      return original;
+    }
+    List<ToolDefinition.Parameter> newParams = new ArrayList<>();
+    for (ToolDefinition.Parameter param : original.parameters()) {
+      if (!param.name().equals(paramName)) {
+        newParams.add(param);
+      }
+    }
+    return new ToolDefinition(
+        original.description(),
+        newParams,
+        original.authRequired(),
+        original.readOnlyHint(),
+        original.destructiveHint());
   }
 
   /**
@@ -114,20 +184,39 @@ public class Tool {
    * @param processor The pre-processor to add.
    * @return The tool instance.
    */
-  public Tool addPreProcessor(ToolPreProcessor processor) {
-    this.preProcessors.add(processor);
-    return this;
+  public Tool addPreProcessor(final ToolPreProcessor processor) {
+    List<ToolPreProcessor> newPre =
+        new ArrayList<>(this.preProcessors != null ? this.preProcessors : Collections.emptyList());
+    newPre.add(processor);
+    return new Tool(
+        this.name,
+        this.definition,
+        this.client,
+        this.boundParameters,
+        this.authGetters,
+        newPre,
+        this.postProcessors);
   }
 
   /**
    * Adds a post-processor to the tool.
    *
    * @param processor The post-processor to add.
-   * @return The tool instance.
+   * @return A new tool instance with the post-processor added.
    */
-  public Tool addPostProcessor(ToolPostProcessor processor) {
-    this.postProcessors.add(processor);
-    return this;
+  public Tool addPostProcessor(final ToolPostProcessor processor) {
+    List<ToolPostProcessor> newPost =
+        new ArrayList<>(
+            this.postProcessors != null ? this.postProcessors : Collections.emptyList());
+    newPost.add(processor);
+    return new Tool(
+        this.name,
+        this.definition,
+        this.client,
+        this.boundParameters,
+        this.authGetters,
+        this.preProcessors,
+        newPost);
   }
 
   /**
@@ -137,7 +226,7 @@ public class Tool {
    * @param args The arguments for the tool invocation.
    * @return A CompletableFuture containing the result of the tool execution.
    */
-  public CompletableFuture<ToolResult> execute(Map<String, Object> args) {
+  public CompletableFuture<ToolResult> execute(final Map<String, Object> args) {
     CompletableFuture<Map<String, Object>> argsFuture =
         CompletableFuture.completedFuture(new HashMap<>(args));
 
@@ -168,7 +257,8 @@ public class Tool {
                   .thenCompose(
                       resolvedAuth -> {
                         try {
-                          // Apply credential parameter bindings and extra headers
+                          // Apply credential parameter bindings and extra
+                          // headers
                           resolvedAuth.applyTo(finalArgs, extraHeaders, definition);
 
                           // Validation & Cleanup
@@ -187,12 +277,18 @@ public class Tool {
     return resultFuture;
   }
 
-  /** Validates arguments against the tool definition and removes null values. */
-  private void validateAndSanitizeArgs(Map<String, Object> args) {
+  /**
+   * Validates arguments against the tool definition and removes null values.
+   *
+   * @param args The arguments to validate.
+   */
+  private void validateAndSanitizeArgs(final Map<String, Object> args) {
     // Remove nulls first (filtering none values)
     args.values().removeIf(Objects::isNull);
 
-    if (definition.parameters() == null) return;
+    if (definition.parameters() == null) {
+      return;
+    }
 
     for (ToolDefinition.Parameter param : definition.parameters()) {
       Object value = args.get(param.name());
@@ -221,7 +317,7 @@ public class Tool {
     }
   }
 
-  private Object deepCopy(Object value) {
+  private Object deepCopy(final Object value) {
     if (value instanceof Map) {
       Map<?, ?> map = (Map<?, ?>) value;
       Map<Object, Object> copy = new HashMap<>();
@@ -240,7 +336,7 @@ public class Tool {
     return value;
   }
 
-  private boolean isTypeMatch(Object value, String type) {
+  private boolean isTypeMatch(final Object value, final String type) {
     switch (type.toLowerCase()) {
       case "string":
         return value instanceof String;
