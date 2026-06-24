@@ -19,6 +19,7 @@ package com.google.cloud.mcp.tool;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.when;
 import com.google.cloud.mcp.McpToolboxClient;
 import com.google.cloud.mcp.auth.ResolvedAuth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -266,6 +268,195 @@ class ToolTest {
     assertEquals("val3", extraHeaders.get("svc3_token"));
     assertTrue(!extraHeaders.containsKey("svc2_token"));
     assertTrue(!extraHeaders.containsKey("null_token"));
+  }
+
+  @Test
+  void testValidateAndSanitizeArgs_customTypeMatch() throws Exception {
+    List<ToolDefinition.Parameter> params =
+        List.of(
+            new ToolDefinition.Parameter("p-custom", "custom-type-name", false, "desc", List.of()));
+    ToolDefinition def = new ToolDefinition("test-tool", params, List.of());
+    McpToolboxClient client = mock(McpToolboxClient.class);
+    when(client.invokeTool(anyString(), anyMap(), anyMap()))
+        .thenReturn(CompletableFuture.completedFuture(new ToolResult(List.of(), false)));
+
+    Tool tool = new Tool("test-tool", def, client);
+    tool.execute(Map.of("p-custom", "any-value")).join(); // should succeed
+  }
+
+  @Test
+  void testValidateAndSanitizeArgs_withNullParameters() throws Exception {
+    ToolDefinition def = new ToolDefinition("test-tool", null, List.of());
+    McpToolboxClient client = mock(McpToolboxClient.class);
+    when(client.invokeTool(anyString(), anyMap(), anyMap()))
+        .thenReturn(CompletableFuture.completedFuture(new ToolResult(List.of(), false)));
+
+    Tool tool = new Tool("test-tool", def, client);
+    tool.execute(Map.of("any-param", "any-value")).join(); // should bypass validation loop safely
+  }
+
+  @Test
+  void testDefaultValueInjection() throws Exception {
+    McpToolboxClient mockClient = mock(McpToolboxClient.class);
+
+    ToolDefinition.Parameter paramWithDefault =
+        new ToolDefinition.Parameter(
+            "param1", "string", false, "A parameter", null, "default_value");
+    ToolDefinition.Parameter paramNoDefault =
+        new ToolDefinition.Parameter("param2", "string", false, "Another parameter", null, null);
+
+    ToolDefinition def =
+        new ToolDefinition("A test tool", List.of(paramWithDefault, paramNoDefault), null);
+
+    Tool tool = new Tool("testTool", def, mockClient);
+
+    when(mockClient.invokeTool(eq("testTool"), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new ToolResult(Collections.emptyList(), false)));
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("param2", "provided_value");
+
+    CompletableFuture<ToolResult> future = tool.execute(args);
+    future.join(); // Wait for execution
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, Object>> argsCaptor = ArgumentCaptor.forClass(Map.class);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> headersCaptor = ArgumentCaptor.forClass(Map.class);
+
+    verify(mockClient).invokeTool(eq("testTool"), argsCaptor.capture(), headersCaptor.capture());
+
+    Map<String, Object> capturedArgs = argsCaptor.getValue();
+
+    assertEquals(
+        "default_value",
+        capturedArgs.get("param1"),
+        "Default value should be injected when not provided");
+    assertEquals("provided_value", capturedArgs.get("param2"), "Provided value should be kept");
+  }
+
+  @Test
+  void testDefaultValueNotOverwritten() throws Exception {
+    McpToolboxClient mockClient = mock(McpToolboxClient.class);
+
+    ToolDefinition.Parameter paramWithDefault =
+        new ToolDefinition.Parameter(
+            "param1", "string", false, "A parameter", null, "default_value");
+
+    ToolDefinition def = new ToolDefinition("A test tool", List.of(paramWithDefault), null);
+
+    Tool tool = new Tool("testTool", def, mockClient);
+
+    when(mockClient.invokeTool(eq("testTool"), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new ToolResult(Collections.emptyList(), false)));
+
+    Map<String, Object> args = new HashMap<>();
+    args.put("param1", "custom_value");
+
+    CompletableFuture<ToolResult> future = tool.execute(args);
+    future.join(); // Wait for execution
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, Object>> argsCaptor = ArgumentCaptor.forClass(Map.class);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> headersCaptor = ArgumentCaptor.forClass(Map.class);
+
+    verify(mockClient).invokeTool(eq("testTool"), argsCaptor.capture(), headersCaptor.capture());
+
+    Map<String, Object> capturedArgs = argsCaptor.getValue();
+
+    assertEquals(
+        "custom_value",
+        capturedArgs.get("param1"),
+        "Provided value should not be overwritten by default value");
+  }
+
+  @Test
+  void testDefaultValueDeepCloning() throws Exception {
+    McpToolboxClient mockClient = mock(McpToolboxClient.class);
+
+    Map<String, Object> complexDefault = new HashMap<>();
+    complexDefault.put("key", "value");
+
+    ToolDefinition.Parameter paramWithDefault =
+        new ToolDefinition.Parameter(
+            "param1", "object", false, "A parameter", null, complexDefault);
+
+    ToolDefinition def = new ToolDefinition("A test tool", List.of(paramWithDefault), null);
+
+    Tool tool = new Tool("testTool", def, mockClient);
+
+    when(mockClient.invokeTool(eq("testTool"), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new ToolResult(Collections.emptyList(), false)));
+
+    Map<String, Object> args = new HashMap<>();
+    CompletableFuture<ToolResult> future = tool.execute(args);
+    future.join();
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, Object>> argsCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(mockClient).invokeTool(eq("testTool"), argsCaptor.capture(), any());
+
+    Map<String, Object> capturedArgs = argsCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> injectedDefault = (Map<String, Object>) capturedArgs.get("param1");
+
+    // Mutate the injected map
+    injectedDefault.put("key", "mutated_value");
+
+    // Ensure the original defaultValue stored in the definition remains untouched
+    @SuppressWarnings("unchecked")
+    Map<String, Object> defValueInDefinition =
+        (Map<String, Object>) def.parameters().get(0).defaultValue();
+    assertEquals(
+        "value",
+        defValueInDefinition.get("key"),
+        "The default value in definition must remain unmutated");
+  }
+
+  @Test
+  void testDefaultValueDeepCloning_withList() throws Exception {
+    McpToolboxClient mockClient = mock(McpToolboxClient.class);
+
+    List<Object> complexDefault = new ArrayList<>();
+    complexDefault.add("value");
+
+    ToolDefinition.Parameter paramWithDefault =
+        new ToolDefinition.Parameter("param1", "array", false, "A parameter", null, complexDefault);
+
+    ToolDefinition def = new ToolDefinition("A test tool", List.of(paramWithDefault), null);
+
+    Tool tool = new Tool("testTool", def, mockClient);
+
+    when(mockClient.invokeTool(eq("testTool"), any(), any()))
+        .thenReturn(
+            CompletableFuture.completedFuture(new ToolResult(Collections.emptyList(), false)));
+
+    Map<String, Object> args = new HashMap<>();
+    CompletableFuture<ToolResult> future = tool.execute(args);
+    future.join();
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, Object>> argsCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(mockClient).invokeTool(eq("testTool"), argsCaptor.capture(), any());
+
+    Map<String, Object> capturedArgs = argsCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    List<Object> injectedDefault = (List<Object>) capturedArgs.get("param1");
+
+    // Mutate the injected list
+    injectedDefault.set(0, "mutated_value");
+
+    // Ensure the original defaultValue stored in the definition remains untouched
+    @SuppressWarnings("unchecked")
+    List<Object> defValueInDefinition = (List<Object>) def.parameters().get(0).defaultValue();
+    assertEquals(
+        "value",
+        defValueInDefinition.get(0),
+        "The default value in definition must remain unmutated");
   }
 
   @Test
