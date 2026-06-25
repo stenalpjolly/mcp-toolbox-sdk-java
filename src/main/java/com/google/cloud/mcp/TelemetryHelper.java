@@ -194,6 +194,14 @@ public final class TelemetryHelper {
     /** Class name of the error if an error occurred. */
     private String errorType = null;
 
+    /**
+     * Constructs a new OperationSpan.
+     *
+     * @param method The MCP method name.
+     * @param version The protocol version.
+     * @param url The server base URL.
+     * @param tool The tool name, or null.
+     */
     public OperationSpan(
         final String method, final String version, final String url, final String tool) {
       this.methodName = method;
@@ -291,6 +299,14 @@ public final class TelemetryHelper {
     }
   }
 
+  /**
+   * Records the duration of an MCP session.
+   *
+   * @param durationSeconds The duration of the session in seconds.
+   * @param protocolVersion The negotiated protocol version.
+   * @param serverUrl The server base URL.
+   * @param error The session error, or null if successful.
+   */
   public static void recordSessionDuration(
       final double durationSeconds,
       final String protocolVersion,
