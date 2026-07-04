@@ -91,6 +91,8 @@ class HttpMcpTransportStatelessTest {
     assertEquals("https://test-mcp-service.com", request.uri().toString());
     assertEquals("POST", request.method());
     assertEquals("2026-06-18", request.headers().firstValue("MCP-Protocol-Version").orElse(""));
+    assertEquals("tools/list", request.headers().firstValue("Mcp-Method").orElse(""));
+    assertTrue(request.headers().firstValue("Mcp-Name").isEmpty());
 
     // Verify metadata was serialized into params
     // HttpRequest body is not easily readable directly from the object without custom publisher
@@ -208,6 +210,8 @@ class HttpMcpTransportStatelessTest {
     assertEquals("https://test-mcp-service.com", request.uri().toString());
     assertEquals("POST", request.method());
     assertEquals("2026-06-18", request.headers().firstValue("MCP-Protocol-Version").orElse(""));
+    assertEquals("tools/call", request.headers().firstValue("Mcp-Method").orElse(""));
+    assertEquals("test-tool", request.headers().firstValue("Mcp-Name").orElse(""));
   }
 
   @Test

@@ -56,6 +56,18 @@ public final class HttpMcpTransportV20260618 extends BaseMcpTransport {
   }
 
   @Override
+  protected void applyProtocolHeaders(
+      final HttpRequest.Builder builder, final String method, final String name) {
+    applyProtocolHeaders(builder);
+    if (method != null) {
+      builder.header("Mcp-Method", method);
+    }
+    if (name != null) {
+      builder.header("Mcp-Name", name);
+    }
+  }
+
+  @Override
   protected Object modifyRequestParams(final String method, final Object params) {
     Map<String, Object> meta = getRequestMeta();
     if ("tools/list".equals(method)) {

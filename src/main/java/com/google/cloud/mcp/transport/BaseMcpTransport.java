@@ -192,6 +192,11 @@ public abstract class BaseMcpTransport implements Transport {
 
   protected abstract void applyProtocolHeaders(final HttpRequest.Builder builder);
 
+  protected void applyProtocolHeaders(
+      final HttpRequest.Builder builder, final String method, final String name) {
+    applyProtocolHeaders(builder);
+  }
+
   protected Object modifyRequestParams(final String method, final Object params) {
     return params;
   }
@@ -218,7 +223,7 @@ public abstract class BaseMcpTransport implements Transport {
                         .uri(URI.create(url))
                         .POST(HttpRequest.BodyPublishers.ofString(body));
                 mergedHeaders.forEach(req::setHeader);
-                applyProtocolHeaders(req);
+                applyProtocolHeaders(req, "tools/list", null);
 
                 return httpClient
                     .sendAsync(req.build(), HttpResponse.BodyHandlers.ofString())
@@ -255,7 +260,7 @@ public abstract class BaseMcpTransport implements Transport {
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody));
 
                 mergedHeaders.forEach(requestBuilder::setHeader);
-                applyProtocolHeaders(requestBuilder);
+                applyProtocolHeaders(requestBuilder, "tools/call", toolName);
 
                 return httpClient
                     .sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofString())
@@ -402,7 +407,8 @@ public abstract class BaseMcpTransport implements Transport {
                       negotiated);
                 } else {
                   throw new com.google.cloud.mcp.exception.McpException(
-                      "No mutually supported protocol version. Client supports: [2026-06-18, 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05], Server supports: "
+                      "No mutually supported protocol version. Client supports: [2026-06-18,"
+                          + " 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05], Server supports: "
                           + serverSupported);
                 }
               }
