@@ -73,10 +73,10 @@ public class Tool {
     this.name = toolName;
     this.definition = toolDefinition;
     this.client = toolboxClient;
-    this.boundParameters = Collections.unmodifiableMap(new HashMap<>(initialBoundParameters));
-    this.authGetters = Collections.unmodifiableMap(new HashMap<>(initialAuthGetters));
-    this.preProcessors = Collections.unmodifiableList(new ArrayList<>(initialPreProcessors));
-    this.postProcessors = Collections.unmodifiableList(new ArrayList<>(initialPostProcessors));
+    this.boundParameters = Collections.unmodifiableMap(initialBoundParameters);
+    this.authGetters = Collections.unmodifiableMap(initialAuthGetters);
+    this.preProcessors = Collections.unmodifiableList(initialPreProcessors);
+    this.postProcessors = Collections.unmodifiableList(initialPostProcessors);
   }
 
   /**
@@ -185,8 +185,7 @@ public class Tool {
    * @return The tool instance.
    */
   public Tool addPreProcessor(final ToolPreProcessor processor) {
-    List<ToolPreProcessor> newPre =
-        new ArrayList<>(this.preProcessors != null ? this.preProcessors : Collections.emptyList());
+    List<ToolPreProcessor> newPre = new ArrayList<>(this.preProcessors);
     newPre.add(processor);
     return new Tool(
         this.name,
@@ -205,9 +204,7 @@ public class Tool {
    * @return A new tool instance with the post-processor added.
    */
   public Tool addPostProcessor(final ToolPostProcessor processor) {
-    List<ToolPostProcessor> newPost =
-        new ArrayList<>(
-            this.postProcessors != null ? this.postProcessors : Collections.emptyList());
+    List<ToolPostProcessor> newPost = new ArrayList<>(this.postProcessors);
     newPost.add(processor);
     return new Tool(
         this.name,
