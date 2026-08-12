@@ -97,13 +97,14 @@ class McpToolboxComplexTypesE2ETest {
     Map<String, Object> args = new HashMap<>();
     args.put("email", "twishabansal@google.com");
     args.put("data", "row3");
-    args.put("id", 2);
+    args.put("id", 3L);
 
     ToolResult result = tool.execute(args).join();
     assertFalse(result.isError(), "Expected success: " + getTextContent(result));
     String output = getTextContent(result);
     assertTrue(output.contains("twishabansal@google.com"));
-    assertTrue(output.contains("row2"));
+    assertTrue(output.contains("row3"));
+    assertFalse(output.contains("row2"));
   }
 
   @Test
