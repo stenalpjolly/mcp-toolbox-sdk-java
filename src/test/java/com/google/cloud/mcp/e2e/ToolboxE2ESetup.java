@@ -39,6 +39,7 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
   private static final String PROJECT_ID_ENV = "GOOGLE_CLOUD_PROJECT";
   private static final String TOOLBOX_VERSION_ENV = "TOOLBOX_VERSION";
   private static final String TOOLBOX_MANIFEST_VERSION_ENV = "TOOLBOX_MANIFEST_VERSION";
+  private static final String TOOLBOX_SERVER_URL_ENV = "TOOLBOX_SERVER_URL";
   private static final String BINARY_NAME = "toolbox";
 
   private Process serverProcess;
@@ -48,10 +49,25 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
 
   @Override
   public void beforeAll(ExtensionContext context) throws Exception {
+    String serverUrl = System.getenv(TOOLBOX_SERVER_URL_ENV);
     String projectId = System.getenv(PROJECT_ID_ENV);
+
     org.junit.jupiter.api.Assumptions.assumeTrue(
-        projectId != null && !projectId.trim().isEmpty(),
-        "Skipping E2E tests because " + PROJECT_ID_ENV + " is not set.");
+        (projectId != null && !projectId.trim().isEmpty())
+            || (serverUrl != null && !serverUrl.trim().isEmpty()),
+        "Skipping E2E tests because neither "
+            + PROJECT_ID_ENV
+            + " nor "
+            + TOOLBOX_SERVER_URL_ENV
+            + " is set.");
+
+    // If an external server URL is provided without GCP project, use it directly
+    if (serverUrl != null
+        && !serverUrl.trim().isEmpty()
+        && (projectId == null || projectId.trim().isEmpty())) {
+      logger.info("Using pre-configured TOOLBOX_SERVER_URL: " + serverUrl);
+      return;
+    }
 
     String toolboxVersion = getEnvVar(TOOLBOX_VERSION_ENV);
     String manifestVersion = getEnvVar(TOOLBOX_MANIFEST_VERSION_ENV);
@@ -124,6 +140,10 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
   }
 
   public String getBaseUrl() {
+    String envUrl = System.getenv(TOOLBOX_SERVER_URL_ENV);
+    if (envUrl != null && !envUrl.trim().isEmpty()) {
+      return envUrl;
+    }
     return "http://localhost:5000/mcp";
   }
 

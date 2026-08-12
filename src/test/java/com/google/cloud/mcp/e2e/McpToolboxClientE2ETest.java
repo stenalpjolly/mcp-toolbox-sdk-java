@@ -18,6 +18,8 @@ package com.google.cloud.mcp.e2e;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.cloud.mcp.McpToolboxClient;
@@ -26,10 +28,14 @@ import com.google.cloud.mcp.tool.ToolDefinition;
 import com.google.cloud.mcp.tool.ToolResult;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 class McpToolboxClientE2ETest {
 
   @RegisterExtension static ToolboxE2ESetup server = new ToolboxE2ESetup();
@@ -41,7 +47,7 @@ class McpToolboxClientE2ETest {
     client = McpToolboxClient.builder().baseUrl(server.getBaseUrl()).build();
   }
 
-  // --- TestBasicE2E ---
+  // --- Toolset Loading & Error Tests ---
 
   @Test
   void testLoadToolsetSpecific() {
@@ -69,13 +75,29 @@ class McpToolboxClientE2ETest {
   }
 
   @Test
+  void testLoadNonExistentToolset() {
+    assertThrows(
+        Exception.class,
+        () -> {
+          client.loadToolset("non-existent-toolset").join();
+        });
+  }
+
+  @Test
+  void testLoadNonExistentTool() {
+    assertThrows(
+        Exception.class,
+        () -> {
+          client.loadTool("non-existent-tool").join();
+        });
+  }
+
+  // --- Tool Invocation & Argument Validations ---
+
+  @Test
   void testRunTool() {
     Tool tool = client.loadTool("get-n-rows").join();
     ToolResult result = tool.execute(Map.of("num_rows", "2")).join();
-
-    if (result.isError()) {
-      System.out.println("ERROR OUTPUT: " + getTextContent(result));
-    }
 
     assertFalse(
         result.isError(), "Expected successful result, but got error: " + getTextContent(result));
@@ -85,7 +107,43 @@ class McpToolboxClientE2ETest {
     assertFalse(output.contains("row3"));
   }
 
-  // --- TestBindParams ---
+  @Test
+  void testRunToolMissingRequiredParams() {
+    Tool tool = client.loadTool("get-n-rows").join();
+    CompletionException ex =
+        assertThrows(
+            CompletionException.class,
+            () -> {
+              tool.execute(Map.of()).join();
+            });
+    assertNotNull(ex.getCause());
+    assertTrue(
+        ex.getCause() instanceof IllegalArgumentException,
+        "Expected IllegalArgumentException but got: " + ex.getCause().getClass().getName());
+    assertTrue(
+        ex.getCause().getMessage().contains("Missing required parameter 'num_rows'"),
+        "Unexpected message: " + ex.getCause().getMessage());
+  }
+
+  @Test
+  void testRunToolWrongParamType() {
+    Tool tool = client.loadTool("get-n-rows").join();
+    CompletionException ex =
+        assertThrows(
+            CompletionException.class,
+            () -> {
+              tool.execute(Map.of("num_rows", 2)).join();
+            });
+    assertNotNull(ex.getCause());
+    assertTrue(
+        ex.getCause() instanceof IllegalArgumentException,
+        "Expected IllegalArgumentException but got: " + ex.getCause().getClass().getName());
+    assertTrue(
+        ex.getCause().getMessage().contains("expected type 'string'"),
+        "Unexpected message: " + ex.getCause().getMessage());
+  }
+
+  // --- Parameter Binding & Schema Pruning ---
 
   @Test
   void testBindParams() {
@@ -115,7 +173,23 @@ class McpToolboxClientE2ETest {
     assertFalse(output.contains("row4"));
   }
 
-  // --- TestAuth ---
+  @Test
+  void testBoundParamPruningSchema() {
+    Tool tool = client.loadTool("get-n-rows").join();
+    boolean hadParam =
+        tool.definition().parameters() != null
+            && tool.definition().parameters().stream().anyMatch(p -> "num_rows".equals(p.name()));
+    assertTrue(hadParam, "Original tool definition should have 'num_rows' parameter");
+
+    Tool boundTool = tool.bindParam("num_rows", "3");
+    boolean hasParamAfter =
+        boundTool.definition().parameters() != null
+            && boundTool.definition().parameters().stream()
+                .anyMatch(p -> "num_rows".equals(p.name()));
+    assertFalse(hasParamAfter, "Bound parameter 'num_rows' must be pruned from definition schema");
+  }
+
+  // --- Authentication & Claim Injections ---
 
   @Test
   void testRunToolAuth() {
@@ -151,6 +225,22 @@ class McpToolboxClientE2ETest {
   }
 
   @Test
+  void testRunToolAuthWithoutProvidingAuth() {
+    Tool tool = client.loadTool("get-row-by-id-auth").join();
+    // Running authenticated tool without adding auth token getter
+    try {
+      ToolResult result = tool.execute(Map.of("id", "2")).join();
+      assertTrue(
+          result.isError(),
+          "Expected error when invoking tool without auth token. Output: "
+              + getTextContent(result));
+    } catch (CompletionException e) {
+      // An exception on unauthenticated execution is also valid
+      assertNotNull(e.getCause());
+    }
+  }
+
+  @Test
   void testRunToolParamAuth() {
     Tool tool =
         client
@@ -179,6 +269,23 @@ class McpToolboxClientE2ETest {
     ToolResult result = tool.execute(Map.of()).join();
     assertTrue(result.isError());
     assertTrue(getTextContent(result).contains("no field named row_data"));
+  }
+
+  @Test
+  void testRunToolWithFailingTokenSupplier() {
+    Tool tool =
+        client
+            .loadTool("get-row-by-id-auth")
+            .join()
+            .addAuthTokenGetter(
+                "my-test-auth",
+                () -> CompletableFuture.failedFuture(new RuntimeException("Token unavailable")));
+
+    assertThrows(
+        Exception.class,
+        () -> {
+          tool.execute(Map.of("id", "2")).join();
+        });
   }
 
   private String getTextContent(ToolResult result) {
