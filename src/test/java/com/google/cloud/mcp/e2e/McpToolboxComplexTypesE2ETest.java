@@ -23,14 +23,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.mcp.McpToolboxClient;
 import com.google.cloud.mcp.tool.Tool;
 import com.google.cloud.mcp.tool.ToolDefinition;
 import com.google.cloud.mcp.tool.ToolResult;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
@@ -68,12 +66,15 @@ class McpToolboxComplexTypesE2ETest {
         if ("email".equals(p.name())) {
           hasEmail = true;
           assertTrue(p.required(), "Parameter 'email' should be required");
+          assertEquals("string", p.type());
         } else if ("data".equals(p.name())) {
           hasData = true;
           assertFalse(p.required(), "Parameter 'data' should be optional");
+          assertEquals("string", p.type());
         } else if ("id".equals(p.name())) {
           hasId = true;
           assertFalse(p.required(), "Parameter 'id' should be optional");
+          assertEquals("integer", p.type());
         }
       }
     }
@@ -192,46 +193,65 @@ class McpToolboxComplexTypesE2ETest {
   }
 
   @Test
-  void testProcessDataWithMapParams() throws JsonProcessingException {
+  void testProcessDataWithMapParams() {
     Tool tool = client.loadTool("process-data").join();
-    ToolResult result =
-        tool.execute(
-                Map.of(
-                    "execution_context",
-                    Map.of("env", "prod", "id", 1234, "user", 1234.5),
-                    "user_scores",
-                    Map.of("user1", 100, "user2", 200),
-                    "feature_flags",
-                    Map.of("new_feature", true)))
-            .join();
+    Map<String, Object> execCtx = new LinkedHashMap<>();
+    execCtx.put("env", "prod");
+    execCtx.put("id", 1234);
+    execCtx.put("user", 1234.5);
+
+    Map<String, Object> userScores = new LinkedHashMap<>();
+    userScores.put("user1", 100);
+    userScores.put("user2", 200);
+
+    Map<String, Object> featureFlags = new LinkedHashMap<>();
+    featureFlags.put("new_feature", true);
+
+    Map<String, Object> args = new LinkedHashMap<>();
+    args.put("execution_context", execCtx);
+    args.put("user_scores", userScores);
+    args.put("feature_flags", featureFlags);
+
+    ToolResult result = tool.execute(args).join();
 
     assertFalse(result.isError(), "Expected success: " + getTextContent(result));
     String output = getTextContent(result);
-    JsonNode root = new ObjectMapper().readTree(output);
-    assertEquals("prod", root.path("execution_context").path("env").asText());
-    assertEquals(1234, root.path("execution_context").path("id").asInt());
-    assertEquals(1234.5, root.path("execution_context").path("user").asDouble(), 0.001);
-    assertEquals(100, root.path("user_scores").path("user1").asInt());
-    assertEquals(200, root.path("user_scores").path("user2").asInt());
-    assertTrue(root.path("feature_flags").path("new_feature").asBoolean());
+    assertTrue(
+        output.contains("\"execution_context\":{\"env\":\"prod\",\"id\":1234,\"user\":1234.5}"),
+        "Output did not contain expected execution_context: " + output);
+    assertTrue(
+        output.contains("\"user_scores\":{\"user1\":100,\"user2\":200}"),
+        "Output did not contain expected user_scores: " + output);
+    assertTrue(
+        output.contains("\"feature_flags\":{\"new_feature\":true}"),
+        "Output did not contain expected feature_flags: " + output);
   }
 
   @Test
-  void testProcessDataOmittingOptionalMap() throws JsonProcessingException {
+  void testProcessDataOmittingOptionalMap() {
     Tool tool = client.loadTool("process-data").join();
-    ToolResult result =
-        tool.execute(
-                Map.of(
-                    "execution_context", Map.of("env", "dev"), "user_scores", Map.of("user3", 300)))
-            .join();
+    Map<String, Object> execCtx = new LinkedHashMap<>();
+    execCtx.put("env", "dev");
+
+    Map<String, Object> userScores = new LinkedHashMap<>();
+    userScores.put("user3", 300);
+
+    Map<String, Object> args = new LinkedHashMap<>();
+    args.put("execution_context", execCtx);
+    args.put("user_scores", userScores);
+
+    ToolResult result = tool.execute(args).join();
 
     assertFalse(result.isError(), "Expected success: " + getTextContent(result));
     String output = getTextContent(result);
-    JsonNode root = new ObjectMapper().readTree(output);
-    assertEquals("dev", root.path("execution_context").path("env").asText());
-    assertEquals(300, root.path("user_scores").path("user3").asInt());
     assertTrue(
-        root.path("feature_flags").isNull() || root.path("feature_flags").isMissingNode(),
-        "Expected null feature_flags: " + output);
+        output.contains("\"execution_context\":{\"env\":\"dev\"}"),
+        "Output did not contain expected execution_context: " + output);
+    assertTrue(
+        output.contains("\"user_scores\":{\"user3\":300}"),
+        "Output did not contain expected user_scores: " + output);
+    assertTrue(
+        output.contains("\"feature_flags\":null"),
+        "Output did not contain expected null feature_flags: " + output);
   }
 }

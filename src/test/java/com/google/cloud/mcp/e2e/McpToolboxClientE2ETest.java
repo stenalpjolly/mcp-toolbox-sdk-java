@@ -85,7 +85,8 @@ class McpToolboxClientE2ETest {
             });
     assertNotNull(ex.getCause());
     assertTrue(
-        ex.getCause().getMessage().contains("non-existent-toolset")
+        ex.getCause().getMessage().contains("toolset does not exist")
+            || ex.getCause().getMessage().contains("non-existent-toolset")
             || ex.getCause().getMessage().contains("Toolset not found"),
         "Unexpected cause: " + ex.getCause().getMessage());
   }
@@ -199,6 +200,13 @@ class McpToolboxClientE2ETest {
             && boundTool.definition().parameters().stream()
                 .anyMatch(p -> "num_rows".equals(p.name()));
     assertFalse(hasParamAfter, "Bound parameter 'num_rows' must be pruned from definition schema");
+
+    boolean originalStillHasParam =
+        tool.definition().parameters() != null
+            && tool.definition().parameters().stream().anyMatch(p -> "num_rows".equals(p.name()));
+    assertTrue(
+        originalStillHasParam,
+        "Original tool definition must still contain 'num_rows' to ensure immutability");
   }
 
   // --- Authentication & Claim Injections ---

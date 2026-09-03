@@ -63,13 +63,19 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
             + TOOLBOX_SERVER_URL_ENV
             + " is set.");
 
-    // If an external server URL is provided without GCP project, use it directly
-    if (serverUrl != null
-        && !serverUrl.trim().isEmpty()
-        && (projectId == null || projectId.trim().isEmpty())) {
+    // If an external server URL is provided, use it directly
+    if (serverUrl != null && !serverUrl.trim().isEmpty()) {
       logger.info("Using pre-configured TOOLBOX_SERVER_URL: " + serverUrl);
       authToken1 = System.getenv(TOOLBOX_AUTH_TOKEN_1_ENV);
       authToken2 = System.getenv(TOOLBOX_AUTH_TOKEN_2_ENV);
+      if (authToken1 == null && projectId != null && !projectId.trim().isEmpty()) {
+        String client1Id = accessSecretVersion(projectId, "sdk_testing_client1", "latest");
+        authToken1 = getAuthToken(client1Id);
+      }
+      if (authToken2 == null && projectId != null && !projectId.trim().isEmpty()) {
+        String client2Id = accessSecretVersion(projectId, "sdk_testing_client2", "latest");
+        authToken2 = getAuthToken(client2Id);
+      }
       return;
     }
 
