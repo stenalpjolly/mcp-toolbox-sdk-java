@@ -40,6 +40,8 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
   private static final String TOOLBOX_VERSION_ENV = "TOOLBOX_VERSION";
   private static final String TOOLBOX_MANIFEST_VERSION_ENV = "TOOLBOX_MANIFEST_VERSION";
   private static final String TOOLBOX_SERVER_URL_ENV = "TOOLBOX_SERVER_URL";
+  private static final String TOOLBOX_AUTH_TOKEN_1_ENV = "TOOLBOX_AUTH_TOKEN_1";
+  private static final String TOOLBOX_AUTH_TOKEN_2_ENV = "TOOLBOX_AUTH_TOKEN_2";
   private static final String BINARY_NAME = "toolbox";
 
   private Process serverProcess;
@@ -66,6 +68,8 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
         && !serverUrl.trim().isEmpty()
         && (projectId == null || projectId.trim().isEmpty())) {
       logger.info("Using pre-configured TOOLBOX_SERVER_URL: " + serverUrl);
+      authToken1 = System.getenv(TOOLBOX_AUTH_TOKEN_1_ENV);
+      authToken2 = System.getenv(TOOLBOX_AUTH_TOKEN_2_ENV);
       return;
     }
 
@@ -145,6 +149,16 @@ public class ToolboxE2ESetup implements BeforeAllCallback, AfterAllCallback {
       return envUrl;
     }
     return "http://localhost:5000/mcp";
+  }
+
+  public static String getTextContent(com.google.cloud.mcp.tool.ToolResult result) {
+    if (result == null || result.content() == null) {
+      return "";
+    }
+    return result.content().stream()
+        .filter(c -> "text".equals(c.type()) && c.text() != null)
+        .map(com.google.cloud.mcp.tool.ToolResult.Content::text)
+        .collect(java.util.stream.Collectors.joining("\n"));
   }
 
   private void startServer() throws IOException, InterruptedException {

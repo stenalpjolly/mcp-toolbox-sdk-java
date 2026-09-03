@@ -16,6 +16,7 @@
 
 package com.google.cloud.mcp.e2e;
 
+import static com.google.cloud.mcp.e2e.ToolboxE2ESetup.getTextContent;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,13 +74,5 @@ class McpToolboxProtocolE2ETest {
       String output = getTextContent(result);
       assertTrue(output.contains("row1"), "Expected row1 for protocol " + version);
     }
-  }
-
-  private String getTextContent(ToolResult result) {
-    if (result.content() == null) return "";
-    return result.content().stream()
-        .filter(c -> "text".equals(c.type()) && c.text() != null)
-        .map(c -> c.text())
-        .collect(java.util.stream.Collectors.joining("\n"));
   }
 }

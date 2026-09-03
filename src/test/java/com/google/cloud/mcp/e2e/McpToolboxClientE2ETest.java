@@ -16,6 +16,7 @@
 
 package com.google.cloud.mcp.e2e;
 
+import static com.google.cloud.mcp.e2e.ToolboxE2ESetup.getTextContent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -76,20 +77,31 @@ class McpToolboxClientE2ETest {
 
   @Test
   void testLoadNonExistentToolset() {
-    assertThrows(
-        Exception.class,
-        () -> {
-          client.loadToolset("non-existent-toolset").join();
-        });
+    CompletionException ex =
+        assertThrows(
+            CompletionException.class,
+            () -> {
+              client.loadToolset("non-existent-toolset").join();
+            });
+    assertNotNull(ex.getCause());
+    assertTrue(
+        ex.getCause().getMessage().contains("non-existent-toolset")
+            || ex.getCause().getMessage().contains("Toolset not found"),
+        "Unexpected cause: " + ex.getCause().getMessage());
   }
 
   @Test
   void testLoadNonExistentTool() {
-    assertThrows(
-        Exception.class,
-        () -> {
-          client.loadTool("non-existent-tool").join();
-        });
+    CompletionException ex =
+        assertThrows(
+            CompletionException.class,
+            () -> {
+              client.loadTool("non-existent-tool").join();
+            });
+    assertNotNull(ex.getCause());
+    assertTrue(
+        ex.getCause().getMessage().contains("Tool not found: non-existent-tool"),
+        "Unexpected cause: " + ex.getCause().getMessage());
   }
 
   // --- Tool Invocation & Argument Validations ---
@@ -228,16 +240,14 @@ class McpToolboxClientE2ETest {
   void testRunToolAuthWithoutProvidingAuth() {
     Tool tool = client.loadTool("get-row-by-id-auth").join();
     // Running authenticated tool without adding auth token getter
-    try {
-      ToolResult result = tool.execute(Map.of("id", "2")).join();
-      assertTrue(
-          result.isError(),
-          "Expected error when invoking tool without auth token. Output: "
-              + getTextContent(result));
-    } catch (CompletionException e) {
-      // An exception on unauthenticated execution is also valid
-      assertNotNull(e.getCause());
-    }
+    ToolResult result = tool.execute(Map.of("id", "2")).join();
+    assertTrue(
+        result.isError(),
+        "Expected error when invoking tool without auth token. Output: " + getTextContent(result));
+    assertTrue(
+        getTextContent(result).toLowerCase().contains("unauthorized")
+            || getTextContent(result).contains("401"),
+        "Expected unauthorized/401 error message. Actual output: " + getTextContent(result));
   }
 
   @Test
@@ -281,18 +291,15 @@ class McpToolboxClientE2ETest {
                 "my-test-auth",
                 () -> CompletableFuture.failedFuture(new RuntimeException("Token unavailable")));
 
-    assertThrows(
-        Exception.class,
-        () -> {
-          tool.execute(Map.of("id", "2")).join();
-        });
-  }
-
-  private String getTextContent(ToolResult result) {
-    if (result.content() == null) return "";
-    return result.content().stream()
-        .filter(c -> "text".equals(c.type()) && c.text() != null)
-        .map(c -> c.text())
-        .collect(java.util.stream.Collectors.joining("\n"));
+    CompletionException ex =
+        assertThrows(
+            CompletionException.class,
+            () -> {
+              tool.execute(Map.of("id", "2")).join();
+            });
+    assertNotNull(ex.getCause());
+    assertTrue(
+        ex.getCause().getMessage().contains("Token unavailable"),
+        "Unexpected cause: " + ex.getCause().getMessage());
   }
 }

@@ -16,12 +16,16 @@
 
 package com.google.cloud.mcp.e2e;
 
+import static com.google.cloud.mcp.e2e.ToolboxE2ESetup.getTextContent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.mcp.McpToolboxClient;
 import com.google.cloud.mcp.tool.Tool;
 import com.google.cloud.mcp.tool.ToolDefinition;
@@ -118,6 +122,9 @@ class McpToolboxComplexTypesE2ETest {
             });
     assertNotNull(ex.getCause());
     assertTrue(
+        ex.getCause() instanceof IllegalArgumentException,
+        "Expected IllegalArgumentException but got: " + ex.getCause().getClass().getName());
+    assertTrue(
         ex.getCause().getMessage().contains("Missing required parameter 'email'"),
         "Unexpected message: " + ex.getCause().getMessage());
   }
@@ -125,14 +132,19 @@ class McpToolboxComplexTypesE2ETest {
   @Test
   void testSearchRowsNonMatchingData() {
     Tool tool = client.loadTool("search-rows").join();
-    ToolResult result =
-        tool.execute(
-                Map.of("email", "twishabansal@google.com", "data", "non-existent-row-pattern-xyz"))
-            .join();
+    Map<String, Object> args = new HashMap<>();
+    args.put("email", "twishabansal@google.com");
+    args.put("id", 3L);
+    args.put("data", "row4");
 
-    assertFalse(result.isError());
-    String output = getTextContent(result);
+    ToolResult result = tool.execute(args).join();
+    assertFalse(result.isError(), "Expected success: " + getTextContent(result));
+    String output = getTextContent(result).trim();
+    assertTrue(
+        output.isEmpty() || "null".equals(output),
+        "Expected empty or 'null' response for non-matching data, got: " + output);
     assertFalse(output.contains("row1"));
+    assertFalse(output.contains("row2"));
     assertFalse(output.contains("row3"));
   }
 
@@ -143,28 +155,83 @@ class McpToolboxComplexTypesE2ETest {
     Tool tool = client.loadTool("process-data").join();
     assertEquals("process-data", tool.name());
     assertNotNull(tool.definition());
+
+    boolean hasExecutionContext = false;
+    boolean hasUserScores = false;
+    boolean hasFeatureFlags = false;
+
+    if (tool.definition().parameters() != null) {
+      for (ToolDefinition.Parameter p : tool.definition().parameters()) {
+        if ("execution_context".equals(p.name())) {
+          hasExecutionContext = true;
+          assertTrue(p.required(), "Parameter 'execution_context' should be required");
+          assertNotNull(p.type());
+          assertTrue(
+              "object".equalsIgnoreCase(p.type()),
+              "Parameter 'execution_context' type should be 'object', got: " + p.type());
+        } else if ("user_scores".equals(p.name())) {
+          hasUserScores = true;
+          assertTrue(p.required(), "Parameter 'user_scores' should be required");
+          assertNotNull(p.type());
+          assertTrue(
+              "object".equalsIgnoreCase(p.type()),
+              "Parameter 'user_scores' type should be 'object', got: " + p.type());
+        } else if ("feature_flags".equals(p.name())) {
+          hasFeatureFlags = true;
+          assertFalse(p.required(), "Parameter 'feature_flags' should be optional");
+          assertNotNull(p.type());
+          assertTrue(
+              "object".equalsIgnoreCase(p.type()),
+              "Parameter 'feature_flags' type should be 'object', got: " + p.type());
+        }
+      }
+    }
+    assertTrue(hasExecutionContext, "Missing required parameter 'execution_context' in definition");
+    assertTrue(hasUserScores, "Missing required parameter 'user_scores' in definition");
+    assertTrue(hasFeatureFlags, "Missing optional parameter 'feature_flags' in definition");
   }
 
   @Test
-  void testProcessDataWithMapParams() {
+  void testProcessDataWithMapParams() throws JsonProcessingException {
     Tool tool = client.loadTool("process-data").join();
-    Map<String, Object> inputData =
-        Map.of("key1", "val1", "count", 5, "nested", Map.of("inner", "value"));
+    ToolResult result =
+        tool.execute(
+                Map.of(
+                    "execution_context",
+                    Map.of("env", "prod", "id", 1234, "user", 1234.5),
+                    "user_scores",
+                    Map.of("user1", 100, "user2", 200),
+                    "feature_flags",
+                    Map.of("new_feature", true)))
+            .join();
 
-    try {
-      ToolResult result = tool.execute(Map.of("input_data", inputData)).join();
-      assertNotNull(result);
-    } catch (Exception e) {
-      // In case server expects specific parameters for process-data
-      assertNotNull(e);
-    }
+    assertFalse(result.isError(), "Expected success: " + getTextContent(result));
+    String output = getTextContent(result);
+    JsonNode root = new ObjectMapper().readTree(output);
+    assertEquals("prod", root.path("execution_context").path("env").asText());
+    assertEquals(1234, root.path("execution_context").path("id").asInt());
+    assertEquals(1234.5, root.path("execution_context").path("user").asDouble(), 0.001);
+    assertEquals(100, root.path("user_scores").path("user1").asInt());
+    assertEquals(200, root.path("user_scores").path("user2").asInt());
+    assertTrue(root.path("feature_flags").path("new_feature").asBoolean());
   }
 
-  private String getTextContent(ToolResult result) {
-    if (result.content() == null) return "";
-    return result.content().stream()
-        .filter(c -> "text".equals(c.type()) && c.text() != null)
-        .map(c -> c.text())
-        .collect(java.util.stream.Collectors.joining("\n"));
+  @Test
+  void testProcessDataOmittingOptionalMap() throws JsonProcessingException {
+    Tool tool = client.loadTool("process-data").join();
+    ToolResult result =
+        tool.execute(
+                Map.of(
+                    "execution_context", Map.of("env", "dev"), "user_scores", Map.of("user3", 300)))
+            .join();
+
+    assertFalse(result.isError(), "Expected success: " + getTextContent(result));
+    String output = getTextContent(result);
+    JsonNode root = new ObjectMapper().readTree(output);
+    assertEquals("dev", root.path("execution_context").path("env").asText());
+    assertEquals(300, root.path("user_scores").path("user3").asInt());
+    assertTrue(
+        root.path("feature_flags").isNull() || root.path("feature_flags").isMissingNode(),
+        "Expected null feature_flags: " + output);
   }
 }
