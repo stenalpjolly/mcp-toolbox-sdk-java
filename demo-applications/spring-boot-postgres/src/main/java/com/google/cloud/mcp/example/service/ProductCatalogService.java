@@ -17,6 +17,7 @@
 package com.google.cloud.mcp.example.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.mcp.McpToolboxClient;
 import com.google.cloud.mcp.example.model.Product;
@@ -82,8 +83,8 @@ public class ProductCatalogService {
    * @param id The product ID (must be positive).
    * @return CompletableFuture containing {@link Product} or null if not found.
    */
-  public CompletableFuture<Product> getProductById(int id) {
-    if (id <= 0) {
+  public CompletableFuture<Product> getProductById(Long id) {
+    if (id == null || id <= 0) {
       return CompletableFuture.failedFuture(
           new IllegalArgumentException("Product ID must be positive"));
     }
@@ -182,8 +183,8 @@ public class ProductCatalogService {
    * @param id The product ID (must be positive).
    * @return CompletableFuture containing true if deleted, false otherwise.
    */
-  public CompletableFuture<Boolean> deleteProductById(int id) {
-    if (id <= 0) {
+  public CompletableFuture<Boolean> deleteProductById(Long id) {
+    if (id == null || id <= 0) {
       return CompletableFuture.failedFuture(
           new IllegalArgumentException("Product ID must be positive"));
     }
@@ -200,7 +201,21 @@ public class ProductCatalogService {
               }
               if (result.content() != null && !result.content().isEmpty()) {
                 String text = result.content().get(0).text();
-                return text != null && text.contains("\"id\"");
+                if (text == null || text.isBlank()) {
+                  return false;
+                }
+                try {
+                  JsonNode rootNode = objectMapper.readTree(text);
+                  if (rootNode.isArray()) {
+                    return !rootNode.isEmpty()
+                        && rootNode.get(0).has("id")
+                        && rootNode.get(0).get("id").asLong() == id;
+                  } else if (rootNode.isObject()) {
+                    return rootNode.has("id") && rootNode.get("id").asLong() == id;
+                  }
+                } catch (JsonProcessingException e) {
+                  logger.warn("Could not parse delete response as JSON: {}", text);
+                }
               }
               return false;
             });

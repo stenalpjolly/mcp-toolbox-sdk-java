@@ -92,12 +92,18 @@ This script:
 3. Spawns the MCP Toolbox server (`mcp-toolbox`) linked to PostgreSQL on port `5005`.
 4. Waits until the server responds to tool discovery.
 
-### 2. Run the Test Suite
+### 2. Run the Test Suites
 
-Execute the integration test suite:
+Execute standalone unit tests (offline, hermetic, no Docker containers required):
 
 ```bash
 mvn clean test -Dnet.bytebuddy.experimental=true
+```
+
+Execute end-to-end integration tests (requires Docker containers running from Step 1):
+
+```bash
+mvn clean verify -Dnet.bytebuddy.experimental=true
 ```
 
 ### 3. Run the Spring Boot Application

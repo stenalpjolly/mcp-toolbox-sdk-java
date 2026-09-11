@@ -15,15 +15,19 @@
 
 set -euo pipefail
 
-echo "==> Cleaning up previous test containers if running..."
+NETWORK_NAME="${NETWORK_NAME:-mcp-network}"
+
+echo "==> Cleaning up previous test containers and network if running..."
 docker rm -f mcp-toolbox mcp-postgres 2>/dev/null || true
+docker network rm "${NETWORK_NAME}" 2>/dev/null || true
+docker network create "${NETWORK_NAME}"
 
 POSTGRES_USER="${POSTGRES_USER:-mcpuser}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-mcppass}"
 POSTGRES_DATABASE="${POSTGRES_DATABASE:-mcpdb}"
 
 echo "==> Starting PostgreSQL container (port 5433:5432)..."
-docker run -d --name mcp-postgres -p 5433:5432 \
+docker run -d --name mcp-postgres --network "${NETWORK_NAME}" --network-alias postgres -p 5433:5432 \
   -e POSTGRES_USER="${POSTGRES_USER}" \
   -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
   -e POSTGRES_DB="${POSTGRES_DATABASE}" \
@@ -39,7 +43,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 docker exec -i mcp-postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DATABASE}" < "${SCRIPT_DIR}/../src/main/resources/schema.sql"
 
 echo "==> Starting MCP Toolbox container with custom tools.yaml (port 5005:5000)..."
-docker run -d --name mcp-toolbox --link mcp-postgres:postgres -p 5005:5000 \
+docker run -d --name mcp-toolbox --network "${NETWORK_NAME}" -p 5005:5000 \
   -e POSTGRES_HOST=postgres \
   -e POSTGRES_PORT=5432 \
   -e POSTGRES_DATABASE="${POSTGRES_DATABASE}" \

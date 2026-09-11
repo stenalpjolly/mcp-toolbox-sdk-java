@@ -49,7 +49,7 @@ import org.springframework.http.ResponseEntity;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Timeout(value = 30, unit = TimeUnit.SECONDS)
-class SpringBootPostgresApplicationTests {
+class SpringBootPostgresApplicationIT {
 
   @Autowired private McpToolboxClient mcpToolboxClient;
 
@@ -100,7 +100,7 @@ class SpringBootPostgresApplicationTests {
     assertNotNull(created);
     assertThat(created.id()).isNotNull();
 
-    Product queried = catalogService.getProductById(created.id().intValue()).join();
+    Product queried = catalogService.getProductById(created.id()).join();
     assertNotNull(queried);
     assertThat(queried.name()).isEqualTo(uniqueItemName);
     assertThat(queried.category()).isEqualTo("Gaming");

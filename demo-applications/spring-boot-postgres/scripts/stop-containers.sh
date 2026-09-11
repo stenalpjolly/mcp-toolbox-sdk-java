@@ -13,5 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+NETWORK_NAME="${NETWORK_NAME:-mcp-network}"
 docker rm -f mcp-toolbox mcp-postgres 2>/dev/null || true
-echo "==> Test containers stopped and removed."
+docker network rm "${NETWORK_NAME}" 2>/dev/null || true
+echo "==> Test containers and network stopped and removed."

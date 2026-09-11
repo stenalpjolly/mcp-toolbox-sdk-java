@@ -71,8 +71,8 @@ public class ProductController {
    * @return The product or HTTP 404 Not Found.
    */
   @GetMapping("/products/{id}")
-  public CompletableFuture<ResponseEntity<Product>> getProductById(@PathVariable int id) {
-    if (id <= 0) {
+  public CompletableFuture<ResponseEntity<Product>> getProductById(@PathVariable Long id) {
+    if (id == null || id <= 0) {
       return CompletableFuture.failedFuture(
           new IllegalArgumentException("Product ID must be positive"));
     }
@@ -137,8 +137,8 @@ public class ProductController {
    * @return HTTP 204 No Content if deleted, or HTTP 404 Not Found.
    */
   @DeleteMapping("/products/{id}")
-  public CompletableFuture<ResponseEntity<Void>> deleteProduct(@PathVariable int id) {
-    if (id <= 0) {
+  public CompletableFuture<ResponseEntity<Void>> deleteProduct(@PathVariable Long id) {
+    if (id == null || id <= 0) {
       return CompletableFuture.failedFuture(
           new IllegalArgumentException("Product ID must be positive"));
     }

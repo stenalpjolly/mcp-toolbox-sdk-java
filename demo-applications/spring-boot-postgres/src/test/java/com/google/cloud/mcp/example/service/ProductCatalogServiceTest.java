@@ -131,11 +131,19 @@ class ProductCatalogServiceTest {
     when(mockClient.invokeTool(eq("get-product-by-id"), any()))
         .thenReturn(CompletableFuture.completedFuture(result));
 
-    Product product = service.getProductById(1).join();
+    Product product = service.getProductById(1L).join();
 
     assertThat(product).isNotNull();
-    assertEquals(1, product.id());
+    assertEquals(1L, product.id());
     assertEquals("Quantum Laptop", product.name());
+  }
+
+  @Test
+  @DisplayName("getProductById rejects non-positive or null ID with IllegalArgumentException")
+  void testGetProductById_InvalidId() {
+    assertValidationFailure(service.getProductById(null), "ID must be positive");
+    assertValidationFailure(service.getProductById(0L), "ID must be positive");
+    assertValidationFailure(service.getProductById(-1L), "ID must be positive");
   }
 
   @Test
@@ -318,25 +326,38 @@ class ProductCatalogServiceTest {
     when(mockClient.invokeTool(eq("delete-product-by-id"), any()))
         .thenReturn(CompletableFuture.completedFuture(deleteResult));
 
-    boolean deleted = service.deleteProductById(1).join();
+    boolean deleted = service.deleteProductById(1L).join();
+    assertThat(deleted).isTrue();
+  }
+
+  @Test
+  @DisplayName("deleteProductById deletes product when result is a JSON array")
+  void testDeleteProductById_ArraySuccess() {
+    ToolResult deleteResult =
+        new ToolResult(List.of(new ToolResult.Content("text", "[{\"id\":1}]")), false);
+    when(mockClient.invokeTool(eq("delete-product-by-id"), any()))
+        .thenReturn(CompletableFuture.completedFuture(deleteResult));
+
+    boolean deleted = service.deleteProductById(1L).join();
     assertThat(deleted).isTrue();
   }
 
   @Test
   @DisplayName("deleteProductById returns false when ID not found")
   void testDeleteProductById_NotFound() {
-    ToolResult emptyResult = new ToolResult(List.of(new ToolResult.Content("text", "{}")), false);
+    ToolResult emptyResult = new ToolResult(List.of(new ToolResult.Content("text", "[]")), false);
     when(mockClient.invokeTool(eq("delete-product-by-id"), any()))
         .thenReturn(CompletableFuture.completedFuture(emptyResult));
 
-    boolean deleted = service.deleteProductById(999).join();
+    boolean deleted = service.deleteProductById(999L).join();
     assertThat(deleted).isFalse();
   }
 
   @Test
-  @DisplayName("deleteProductById rejects non-positive ID with IllegalArgumentException")
+  @DisplayName("deleteProductById rejects non-positive or null ID with IllegalArgumentException")
   void testDeleteProductById_InvalidId() {
-    assertValidationFailure(service.deleteProductById(0), "ID must be positive");
-    assertValidationFailure(service.deleteProductById(-1), "ID must be positive");
+    assertValidationFailure(service.deleteProductById(null), "ID must be positive");
+    assertValidationFailure(service.deleteProductById(0L), "ID must be positive");
+    assertValidationFailure(service.deleteProductById(-1L), "ID must be positive");
   }
 }
