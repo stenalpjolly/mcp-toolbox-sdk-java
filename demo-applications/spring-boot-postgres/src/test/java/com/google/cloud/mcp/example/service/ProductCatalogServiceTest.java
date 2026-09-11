@@ -354,6 +354,18 @@ class ProductCatalogServiceTest {
   }
 
   @Test
+  @DisplayName("deleteProductById returns false when response payload is malformed JSON")
+  void testDeleteProductById_MalformedJson() {
+    ToolResult malformedResult =
+        new ToolResult(List.of(new ToolResult.Content("text", "{malformed_id:")), false);
+    when(mockClient.invokeTool(eq("delete-product-by-id"), any()))
+        .thenReturn(CompletableFuture.completedFuture(malformedResult));
+
+    boolean deleted = service.deleteProductById(1L).join();
+    assertThat(deleted).isFalse();
+  }
+
+  @Test
   @DisplayName("deleteProductById rejects non-positive or null ID with IllegalArgumentException")
   void testDeleteProductById_InvalidId() {
     assertValidationFailure(service.deleteProductById(null), "ID must be positive");
